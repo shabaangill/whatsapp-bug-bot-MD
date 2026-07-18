@@ -1,0 +1,15 @@
+{
+  "name": "shabaan-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Shabaan's WhatsApp Auto-Responder",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Shabaan",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.7",
+    "@hapi/boom": "^10.0.1",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

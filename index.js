@@ -13,7 +13,6 @@ const { Boom } = require('@hapi/boom');
 const { handleCommand } = require("./menu/case");
 const { loadSettings } = require("./settings");
 const { storeMessage, handleMessageRevocation } = require("./antidelete");
-const { antibugHandler } = require("./antibug.js"); 
 
 const BOT_NAME = "Shabaan Bot";
 const OWNER_NAME = "Shabaan";
@@ -132,16 +131,6 @@ async function startBot() {
       return;  
     }  
 
-    // ✅ AntiBug Safety Filtering Matrix
-    if (global.antibug === true && !msg.key.fromMe) {
-      try {
-        const isBug = await antibugHandler({ conn: sock, m: msg }); 
-        if (isBug) return;
-      } catch (err) {
-        console.error("❌ AntiBug Error:", err.message || err);
-      }
-    }
-
     // ✅ Native Base Commands System (Fast Route)
     if (command === '.alive') {
         return await sock.sendMessage(jid, { 
@@ -156,8 +145,7 @@ async function startBot() {
                          `• \`.alive\` — Run response connectivity diagnostic\n` +
                          `• \`.menu\` — Open responsive helper dashboard\n` +
                          `• *Anti-Delete Mode:* ${settings.ANTIDELETE === true ? "🟢 Active" : "🔴 Inactive"}\n` +
-                         `• *Auto-Reaction Engine:* ${global.autoreact ? "🟢 Active" : "🔴 Inactive"}\n` +
-                         `• *Anti-Bug Security:* ${global.antibug ? "🟢 Active" : "🔴 Inactive"}\n\n` +
+                         `• *Auto-Reaction Engine:* ${global.autoreact ? "🟢 Active" : "🔴 Inactive"}\n\n` +
                          `_${global.signature}_`;
 
         return await sock.sendMessage(jid, { text: menuText }, { quoted: msg });
@@ -218,4 +206,4 @@ async function startBot() {
 }
 
 startBot();
-    
+        

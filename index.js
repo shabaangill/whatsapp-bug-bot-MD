@@ -77,6 +77,7 @@ async function startBot() {
     if (!msg.message) return;
 
     const jid = msg.key.remoteJid;
+    const isGroup = jid.endsWith("@g.us");
     
     // Process input context cleanly across groups and private profiles
     const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
@@ -151,9 +152,15 @@ async function startBot() {
         return await sock.sendMessage(jid, { text: menuText }, { quoted: msg });
     }
 
-    // ✅ Extended Case Routing Matrix Handler
+    // ✅ Extended Case Routing Matrix Handler (Fixed Object Delivery)
     try {  
-      await handleCommand(sock, msg, {});  
+      await handleCommand(sock, msg, {
+        text,
+        cleanInput,
+        command,
+        isGroup,
+        sender: msg.key.participant || msg.key.remoteJid
+      });  
     } catch (err) {  
       console.error("❌ Command error:", err.message || err);  
     }
@@ -206,4 +213,4 @@ async function startBot() {
 }
 
 startBot();
-        
+             

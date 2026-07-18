@@ -1,7 +1,7 @@
 {
   "name": "shabaan-whatsapp-bot",
   "version": "1.0.0",
-  "description": "Shabaan's WhatsApp Auto-Responder",
+  "description": "Shabaan's Dynamic Auto-Responder",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

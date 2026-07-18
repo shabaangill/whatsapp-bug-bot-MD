@@ -5,12 +5,11 @@ const readline = require('readline');
 const BOT_NAME = "Shabaan Bot";
 const OWNER_NAME = "Shabaan";
 
-// ⚠️ REPLACE THIS WITH YOUR BOT'S PHONE NUMBER (Include country code, no spaces, no '+' sign)
-// Example: "923XXXXXXXXX"
+// ✅ Your phone number has been correctly configured with country code here
 const PHONE_NUMBER = "923143007893"; 
 
 async function startBot() {
-    const { version, isLatest } = aconst { version, isLatest } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015190524], isLatest: false }));wait fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015190524], isLatest: false }));
+    const { version, isLatest } = await fetchLatestWaWebVersion().catch(() => ({ version: [2, 3000, 1015190524], isLatest: false }));
     console.log(`ℹ️ Synchronizing with WA Web v${version.join('.')}, Latest: ${isLatest}`);
 
     const { state, saveCreds } = await useMultiFileAuthState('./shabaan_session_vault');
@@ -83,3 +82,4 @@ async function startBot() {
 }
 
 startBot();
+                

@@ -17,7 +17,8 @@ async function startBot() {
     const sock = makeWASocket({ 
         version,
         auth: state,
-        browser: ["Ubuntu", "Chrome", "20.0.04"]
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        printQRInTerminal: false // High-speed optimization when pairing via text code
     });
 
     // Triggers the Pairing Code generation if the session isn't logged in yet
@@ -48,8 +49,8 @@ async function startBot() {
                 lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut : true;
             
             if (shouldReconnect) {
-                console.log('⚠️ Reconnecting in 5 seconds to bypass network traffic throttling...');
-                setTimeout(() => { startBot(); }, 5000); 
+                console.log('⚠️ Reconnecting in 3 seconds for optimal uptime throughput...');
+                setTimeout(() => { startBot(); }, 3000); 
             }
         } else if (connection === 'open') {
             console.log(`🚀 Success! ${BOT_NAME} is officially Online & Operational! 🚀`);
@@ -59,34 +60,37 @@ async function startBot() {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('messages.upsert', async (m) => {
+        // High-speed validation checkpoint
+        if (m.type !== 'notify') return; 
         const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
+        if (!msg.message) return;
 
         const from = msg.key.remoteJid;
         
-        // Advanced text extractor to capture all chat/media variations flawlessly
+        // 🚀 CRITICAL FIX: Removed 'fromMe' block. The bot will now answer YOU and everyone else smoothly!
+        const isGroup = from.endsWith('@g.us');
+        
+        // Streamlined, rapid text extractor
         const body = msg.message.conversation || 
                      msg.message.extendedTextMessage?.text || 
                      msg.message.imageMessage?.caption || 
                      msg.message.videoMessage?.caption || 
                      "";
 
-        // Standardize raw incoming strings for clean execution matching
         const cleanInput = body.trim();
         const command = cleanInput.toLowerCase();
+
+        // Avoid empty triggers
+        if (!cleanInput) return;
 
         // ==========================================
         // ⚡ FEATURE: AUTO-REACT ENGINE
         // ==========================================
-        // Automatically adds a reaction to certain keywords or prefixes
         if (cleanInput.startsWith('.')) {
-            await sock.sendMessage(from, {
-                react: { text: "⚡", key: msg.key }
-            });
+            // Fires asynchronously so it doesn't delay command execution speed
+            sock.sendMessage(from, { react: { text: "⚡", key: msg.key } }).catch(() => {});
         } else if (command.includes('hello') || command.includes('hi')) {
-            await sock.sendMessage(from, {
-                react: { text: "👋", key: msg.key }
-            });
+            sock.sendMessage(from, { react: { text: "👋", key: msg.key } }).catch(() => {});
         }
 
         // ==========================================
@@ -95,12 +99,12 @@ async function startBot() {
 
         // 1. .alive Command
         if (command === '.alive') {
-            await sock.sendMessage(from, { 
+            return await sock.sendMessage(from, { 
                 text: `✨ *${BOT_NAME} Status* ✨\n\n🟢 *Status:* Active and Operational\n👑 *Owner:* ${OWNER_NAME}` 
-            });
+            }, { quoted: msg });
         }
 
-        // 2. .status / .view Command (Detailed Server Analytics)
+        // 2. .status / .view Command
         if (command === '.status' || command === '.view') {
             const uptime = process.uptime();
             const hours = Math.floor(uptime / 3600);
@@ -112,16 +116,16 @@ async function startBot() {
                                `⏰ *Server Uptime:* ${hours}h ${minutes}m ${seconds}s\n` +
                                `📡 *Platform Environment:* Railway Cloud\n` +
                                `⚡ *Auto-Reaction Mode:* Enabled (Active)\n` +
-                               `👥 *Target Socket:* Multi-Device Node Node`;
+                               `👥 *Chat Location:* ${isGroup ? 'Group Chat' : 'Direct Message'}`;
 
-            await sock.sendMessage(from, { text: statusText });
+            return await sock.sendMessage(from, { text: statusText }, { quoted: msg });
         }
         
         // 3. .owner Command
         if (command === '.owner') {
-            await sock.sendMessage(from, {
+            return await sock.sendMessage(from, {
                 text: `👑 *Official Developer Info* 👑\n\nThis application matrix is built, managed, and driven by *${OWNER_NAME}*.`
-            });
+            }, { quoted: msg });
         }
         
         // 4. .menu / .help Central Command Hub
@@ -135,12 +139,11 @@ async function startBot() {
                              `• \`.owner\` — Access administrative contact identity profiles\n\n` +
                              `✨ *INTELLIGENT AUTO FEATURES* ✨\n\n` +
                              `• *Auto React Engine:* Automatically drops a ⚡ emoji to commands and a 👋 emoji to greeting texts.\n\n` +
-                             `💡 _Tip: Make sure to type the command correctly from an alternate phone to see the bot respond._`;
+                             `💡 _Tip: You can now type these commands directly inside your own chat box to test!_`;
 
-            await sock.sendMessage(from, { text: menuText });
+            return await sock.sendMessage(from, { text: menuText }, { quoted: msg });
         }
     });
 }
 
 startBot();
-               

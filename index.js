@@ -13,7 +13,6 @@ const { Boom } = require('@hapi/boom');
 const { handleCommand } = require("./menu/case");
 const { loadSettings } = require("./settings");
 const { storeMessage, handleMessageRevocation } = require("./antidelete");
-const AntiLinkKick = require("./antilinkick.js");
 const { antibugHandler } = require("./antibug.js"); 
 
 const BOT_NAME = "Shabaan Bot";
@@ -44,8 +43,6 @@ async function startBot() {
   global.ownerNumber = PHONE_NUMBER;
 
   // ✅ System Feature Flags Configuration
-  global.antilink = {};
-  global.antilinkick = {};
   global.antibug = false;
   global.autogreet = {};
   global.autotyping = false;
@@ -135,36 +132,6 @@ async function startBot() {
       return;  
     }  
 
-    // ✅ Antilink Processing Loop
-    if (
-      jid.endsWith("@g.us") &&
-      global.antilink[jid] === true &&
-      /(chat\.whatsapp\.com|t\.me|discord\.gg|wa\.me|bit\.ly|youtu\.be|https?:\/\/)/i.test(text) &&
-      !msg.key.fromMe
-    ) {
-      try {
-        await sock.sendMessage(jid, {  
-          delete: { remoteJid: jid, fromMe: false, id: msg.key.id, participant: msg.key.participant || msg.participant }  
-        });  
-      } catch (err) {
-        console.error("❌ Antilink Delete Error:", err.message);
-      }
-    }
-
-    // ✅ AntilinkKick Moderation Enforcement
-    if (
-      jid.endsWith("@g.us") &&
-      global.antilinkick[jid] === true &&
-      /(chat\.whatsapp\.com|t\.me|discord\.gg|wa\.me|bit\.ly|youtu\.be|https?:\/\/)/i.test(text) &&
-      !msg.key.fromMe
-    ) {
-      try {
-        await AntiLinkKick.checkAntilinkKick({ conn: sock, m: msg });
-      } catch (err) {
-        console.error("❌ AntilinkKick Error:", err.message || err);
-      }
-    }
-
     // ✅ AntiBug Safety Filtering Matrix
     if (global.antibug === true && !msg.key.fromMe) {
       try {
@@ -251,3 +218,4 @@ async function startBot() {
 }
 
 startBot();
+    
